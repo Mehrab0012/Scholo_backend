@@ -40,31 +40,31 @@ async function run() {
 
     //scholership api
     app.get('/scholarships', async (req, res) => {
-      const limit = Number(req.query.limit) ||6;
+      const limit = Number(req.query.limit) || 6;
       const result = await scholershipsCollection.find().limit(limit).toArray();
       res.send(result);
     })
 
-app.get("/scholarships/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
+    app.get("/scholarships/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
 
-    // validate ObjectId
-    if (!ObjectId.isValid(id)) return res.status(400).send("Invalid ID");
+        // validate ObjectId
+        if (!ObjectId.isValid(id)) return res.status(400).send("Invalid ID");
 
-    const result = await scholershipsCollection.findOne({ _id: new ObjectId(id) });
+        const result = await scholershipsCollection.findOne({ _id: new ObjectId(id) });
 
-    if (!result) return res.status(404).send("Scholarship not found");
+        if (!result) return res.status(404).send("Scholarship not found");
 
-    res.send(result);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Server error");
-  }
-});
+        res.send(result);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send("Server error");
+      }
+    });
 
 
-//posting data
+    //posting data
     app.post('/scholarships', async (req, res) => {
       try {
         const newScholarship = req.body;
@@ -76,8 +76,23 @@ app.get("/scholarships/:id", async (req, res) => {
       }
     })
 
+    //get user data
+    app.get("/users", async (req, res) => {
+      try {
+        const { email } = req.query;
+        if (!email) {
+          return res.status(400).send({ message: 'Email is required' });
+        }
+
+        const result = await usersCollection.findOne({ email });
+        res.send(result);
+      
+      } catch (error) {
+        res.status(500).send({ message: 'Server error', error });
+      }
+    })
     //save or update user
-    app.post('/user', async (req, res) => {
+    app.post('/users', async (req, res) => {
       const userData = req.body;
       const result = await usersCollection.insertOne(userData);
       res.send(result);
