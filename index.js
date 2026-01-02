@@ -37,6 +37,60 @@ async function run() {
       res.send(result);
     });
 
+
+
+app.get('/scholarships/bulk', async (req, res) => {
+    try {
+        const idsParam = req.query.ids;
+        if (!idsParam) return res.status(400).send({ message: "IDs missing" });
+
+        const ids = idsParam.split(',');
+        const objectIds = ids
+            .filter(id => id && id.length === 24) // Basic check for valid hex string length
+            .map(id => new ObjectId(id));
+
+        if (objectIds.length === 0) return res.status(400).send({ message: "No valid IDs" });
+
+        const result = await scholarshipsCollection
+            .find({ _id: { $in: objectIds } })
+            .toArray();
+
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Server error" });
+    }
+});
+// GET all applications for Admin
+app.get('/all-applications', async (req, res) => {
+    // In a real app, verify admin role here
+    const result = await applicationsCollection.find().sort({ createdAt: -1 }).toArray();
+    res.send(result);
+});
+
+// GET single application details by ID
+app.get('/applications/single/:id', async (req, res) => {
+    const id = req.params.id;
+    const result = await applicationsCollection.findOne({ _id: new ObjectId(id) });
+    res.send(result);
+});
+
+app.patch('/applications/review/:id', async (req, res) => {
+    const id = req.params.id;
+    const { status, internalNotes, feedback, awarded } = req.body;
+    const filter = { _id: new ObjectId(id) };
+    const updateDoc = {
+        $set: {
+            applicationStatus: status,
+            internalNotes: internalNotes,
+            feedback: feedback,
+            awarded: awarded 
+        }
+    };
+    const result = await applicationsCollection.updateOne(filter, updateDoc);
+    res.send(result);
+});
+
+
     app.get('/scholarships/:id', async (req, res) => {
       const id = req.params.id;
       if (!ObjectId.isValid(id)) return res.status(400).send("Invalid ID");
@@ -45,7 +99,6 @@ async function run() {
       if (!result) return res.status(404).send("Scholarship not found");
       res.send(result);
     });
-
     app.post('/scholarships', async (req, res) => {
       try {
         const newScholarship = req.body;
@@ -93,7 +146,24 @@ async function run() {
     });
 
     //application
-    
+    app.get('/applications', async (req, res) => {
+      try {
+        const { email } = req.query;
+
+        if (!email) {
+          return res.status(400).send({ message: 'Email query is required' });
+        }
+
+        const applications = await applicationsCollection
+          .find({ email })
+          .toArray();
+
+        res.send(applications);
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ message: err.message });
+      }
+    });
 
     // --- Applications routes ---
     app.get('/applications/check', async (req, res) => {
@@ -101,7 +171,7 @@ async function run() {
       const result = await applicationsCollection.findOne({ email, scholarshipId });
       res.send(result);
     });
-    
+
 
     app.post('/applications', async (req, res) => {
       const applicationData = req.body;
