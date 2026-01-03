@@ -411,4 +411,7 @@ app.get('/', (req, res) => {
   res.send('Server is running');
 });
 
-module.exports = app;
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Server is running at port ${port}`);
+});
