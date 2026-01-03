@@ -61,7 +61,7 @@ const verifyToken = (req, res, next) => {
 // Main async function
 async function run() {
   try {
-    await client.connect();
+  
 
     const db = client.db('ScholarshipStream');
     const scholarshipsCollection = db.collection('scholarships');
@@ -397,6 +397,7 @@ async function run() {
   }
 }
 
+
 run().catch(console.dir);
 
 // Test route
@@ -404,3 +405,4 @@ app.get('/', (req, res) => {
   res.send('Server is running');
 });
 
+module.exports = app;
