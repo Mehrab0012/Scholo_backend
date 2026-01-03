@@ -74,7 +74,7 @@ Start the server:
 npm run dev
 
 
-The server should now be running at http://localhost:3000.
+The server should now be running at https://scholarshipstreambackend.vercel.app.
 
 API Endpoints
 Users
