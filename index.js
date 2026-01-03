@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const app = express();
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
@@ -20,6 +21,30 @@ const client = new MongoClient(uri, {
 app.use(express.json());
 app.use(cors());
 
+//jwt verification
+
+const verifyToken = (req, res, next) => {
+  if (!req.headers.authorization) {
+    return res.status(401).send({ message: 'unauthorized access' });
+  }
+  const token = req.headers.authorization.split(' ')[1];
+
+  // ERROR CHECK: If ACCESS_TOKEN_SECRET is missing in .env, this throws a 500
+  if (!process.env.ACCESS_TOKEN_SECRET) {
+    console.error("JWT Secret is missing in .env file!");
+    return res.status(500).send({ message: "Server configuration error" });
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: 'unauthorized access' });
+    }
+    req.decoded = decoded;
+    next();
+  });
+};
+
+
 // Main async function
 async function run() {
   try {
@@ -30,6 +55,14 @@ async function run() {
     const usersCollection = db.collection('users');
     const applicationsCollection = db.collection('applications');
     const reviewsCollection = db.collection('reviews');
+
+
+    // --- AUTH API (Generate Token) ---
+    app.post('/jwt', async (req, res) => {
+      const user = req.body; // Expecting { email: '...' }
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+      res.send({ token });
+    });
 
     // --- Scholarships routes ---
     app.get('/scholarships', async (req, res) => {
@@ -50,7 +83,7 @@ async function run() {
 
 
 
-    app.get('/scholarships/bulk', async (req, res) => {
+    app.get('/scholarships/bulk', verifyToken, async (req, res) => {
       try {
         const idsParam = req.query.ids;
         if (!idsParam) return res.status(400).send({ message: "IDs missing" });
@@ -72,20 +105,20 @@ async function run() {
       }
     });
     // GET all applications for Admin
-    app.get('/all-applications', async (req, res) => {
+    app.get('/all-applications', verifyToken, async (req, res) => {
       // In a real app, verify admin role here
       const result = await applicationsCollection.find().sort({ createdAt: -1 }).toArray();
       res.send(result);
     });
 
     // GET single application details by ID
-    app.get('/applications/single/:id', async (req, res) => {
+    app.get('/applications/single/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const result = await applicationsCollection.findOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
-    app.patch('/applications/review/:id', async (req, res) => {
+    app.patch('/applications/review/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       const { status, internalNotes, feedback, awarded } = req.body;
       const filter = { _id: new ObjectId(id) };
@@ -102,7 +135,7 @@ async function run() {
     });
 
 
-    app.get('/scholarships/:id', async (req, res) => {
+    app.get('/scholarships/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
       if (!ObjectId.isValid(id)) return res.status(400).send("Invalid ID");
 
@@ -110,7 +143,7 @@ async function run() {
       if (!result) return res.status(404).send("Scholarship not found");
       res.send(result);
     });
-    app.post('/scholarships', async (req, res) => {
+    app.post('/scholarships', verifyToken, async (req, res) => {
       try {
         const newScholarship = req.body;
         const result = await scholarshipsCollection.insertOne(newScholarship);
@@ -121,14 +154,14 @@ async function run() {
     });
 
     // --- Users routes ---
-    app.get('/users', async (req, res) => {
+    app.get('/users', verifyToken, async (req, res) => {
       const { email } = req.query;
       if (!email) return res.status(400).send({ message: 'Email is required' });
 
       const result = await usersCollection.findOne({ email });
       res.send(result);
     });
-    app.get('/users/count', async (req, res) => {
+    app.get('/users/count', verifyToken, async (req, res) => {
       try {
         const count = await usersCollection.countDocuments();
         res.send({ totalUsers: count });
@@ -157,14 +190,14 @@ async function run() {
       }
     });
 
-    app.get('/user/role/:email', async (req, res) => {
+    app.get('/user/role/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
       const result = await usersCollection.findOne({ email });
       res.send({ role: result?.role || "student" });
     });
 
     // 1. Fetch all users for the dashboard
-    app.get('/users/manage/all', async (req, res) => {
+    app.get('/users/manage/all', verifyToken, async (req, res) => {
       try {
         const result = await usersCollection.find().toArray();
         res.send(result);
@@ -174,7 +207,7 @@ async function run() {
     });
 
     // 2. Update user role specifically (won't conflict with your POST /users)
-    app.patch('/users/manage/role/:id', async (req, res) => {
+    app.patch('/users/manage/role/:id', verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
         const { role } = req.body;
@@ -186,26 +219,37 @@ async function run() {
         res.status(500).send({ message: "Failed to update role" });
       }
     });
-    app.patch('/users/login-update', async (req, res) => {
+    app.patch('/users/login-update', verifyToken, async (req, res) => {
       try {
         const { email } = req.body;
         if (!email) return res.status(400).send({ message: "Email is required" });
 
+        // Only allow user to update their own lastLoggedIn
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ message: "Forbidden access" });
+        }
+
         const filter = { email: email };
         const updateDoc = {
           $set: {
-            lastLoggedIn: new Date() // Sets current date and time
+            lastLoggedIn: new Date()
           }
         };
 
         const result = await usersCollection.updateOne(filter, updateDoc);
-        res.send(result);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "User not found" });
+        }
+
+        res.send({ message: "Login timestamp updated successfully", result });
       } catch (err) {
+        console.error("Login update error:", err);
         res.status(500).send({ message: "Server error during login update" });
       }
     });
     // 3. Delete a user
-    app.delete('/users/manage/delete/:id', async (req, res) => {
+    app.delete('/users/manage/delete/:id', verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
         const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
@@ -216,7 +260,7 @@ async function run() {
     });
 
     //application
-    app.get('/applications', async (req, res) => {
+    app.get('/applications', verifyToken, async (req, res) => {
       try {
         const { email } = req.query;
 
@@ -236,14 +280,14 @@ async function run() {
     });
 
     // --- Applications routes ---
-    app.get('/applications/check', async (req, res) => {
+    app.get('/applications/check', verifyToken, async (req, res) => {
       const { email, scholarshipId } = req.query;
       const result = await applicationsCollection.findOne({ email, scholarshipId });
       res.send(result);
     });
 
 
-    app.post('/applications', async (req, res) => {
+    app.post('/applications', verifyToken, async (req, res) => {
       const applicationData = req.body;
 
       // Check for duplicate application for the SAME scholarship
@@ -264,7 +308,7 @@ async function run() {
     });
 
     // Update payment status after successful Stripe redirect
-    app.patch('/applications/payment-confirm/:id', async (req, res) => {
+    app.patch('/applications/payment-confirm/:id', verifyToken, async (req, res) => {
       const { id } = req.params;
       const { transactionId } = req.body;
       const filter = { _id: new ObjectId(id) };
@@ -279,7 +323,7 @@ async function run() {
     });
 
     // --- Stripe checkout session ---
-    app.post('/create-checkout-session', async (req, res) => {
+    app.post('/create-checkout-session', verifyToken, async (req, res) => {
       try {
         const info = req.body;
         const amount = Math.round(info.applicationFees * 100);
@@ -309,12 +353,12 @@ async function run() {
       }
     });
 
-    app.post('/payment-success', async (req, res) => {
+    app.post('/payment-success', verifyToken, async (req, res) => {
       const { sessionId } = req.body;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       res.send(session);
     });
-    app.get('/reviews/:scholarshipId', async (req, res) => {
+    app.get('/reviews/:scholarshipId', verifyToken, async (req, res) => {
       const { scholarshipId } = req.params;
       const result = await reviewsCollection
         .find({ scholarshipId })
@@ -324,7 +368,7 @@ async function run() {
     });
 
     // POST: Add a new review
-    app.post('/reviews', async (req, res) => {
+    app.post('/reviews', verifyToken, async (req, res) => {
       const reviewData = req.body;
       const result = await reviewsCollection.insertOne({
         ...reviewData,
