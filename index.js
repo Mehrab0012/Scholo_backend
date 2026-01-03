@@ -7,7 +7,7 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.pvnuook.mongodb.net/?appName=Cluster0`;
-const port = process.env.PORT || 3000;
+
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -404,6 +404,3 @@ app.get('/', (req, res) => {
   res.send('Server is running');
 });
 
-app.listen(port, () => {
-  console.log(`Server is running at port ${port}`);
-});
