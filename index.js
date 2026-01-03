@@ -22,7 +22,15 @@ app.use(express.json());
 
 
 // --- CORS setup for Netlify frontend ---
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://scholarshipstream.netlify.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  credentials: true
+}));
+
+app.use(express.json());
 //jwt verification
 
 const verifyToken = (req, res, next) => {
