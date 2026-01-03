@@ -33,63 +33,73 @@ async function run() {
 
     // --- Scholarships routes ---
     app.get('/scholarships', async (req, res) => {
-      const limit = Number(req.query.limit) || 6;
-      const result = await scholarshipsCollection.find().limit(limit).toArray();
+      const { search, category, degree, sort, limit } = req.query;
+
+      let query = {};
+      if (search) query.title = { $regex: search, $options: 'i' };
+      if (category) query.category = { $in: category.split(',') };
+      if (degree) query.degree = { $in: degree.split(',') };
+
+      let sortOptions = {};
+      if (sort === "Amount: High to Low") sortOptions.amount = -1;
+      else sortOptions.createdAt = -1; // Newest Added
+
+      const result = await scholarshipsCollection.find(query).sort(sortOptions).limit(Number(limit)).toArray();
       res.send(result);
     });
 
 
 
-app.get('/scholarships/bulk', async (req, res) => {
-    try {
+    app.get('/scholarships/bulk', async (req, res) => {
+      try {
         const idsParam = req.query.ids;
         if (!idsParam) return res.status(400).send({ message: "IDs missing" });
 
         const ids = idsParam.split(',');
         const objectIds = ids
-            .filter(id => id && id.length === 24) // Basic check for valid hex string length
-            .map(id => new ObjectId(id));
+          .filter(id => id && id.length === 24) // Basic check for valid hex string length
+          .map(id => new ObjectId(id));
 
         if (objectIds.length === 0) return res.status(400).send({ message: "No valid IDs" });
 
         const result = await scholarshipsCollection
-            .find({ _id: { $in: objectIds } })
-            .toArray();
+          .find({ _id: { $in: objectIds } })
+          .toArray();
 
         res.send(result);
-    } catch (error) {
+      } catch (error) {
         res.status(500).send({ message: "Server error" });
-    }
-});
-// GET all applications for Admin
-app.get('/all-applications', async (req, res) => {
-    // In a real app, verify admin role here
-    const result = await applicationsCollection.find().sort({ createdAt: -1 }).toArray();
-    res.send(result);
-});
+      }
+    });
+    // GET all applications for Admin
+    app.get('/all-applications', async (req, res) => {
+      // In a real app, verify admin role here
+      const result = await applicationsCollection.find().sort({ createdAt: -1 }).toArray();
+      res.send(result);
+    });
 
-// GET single application details by ID
-app.get('/applications/single/:id', async (req, res) => {
-    const id = req.params.id;
-    const result = await applicationsCollection.findOne({ _id: new ObjectId(id) });
-    res.send(result);
-});
+    // GET single application details by ID
+    app.get('/applications/single/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await applicationsCollection.findOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
 
-app.patch('/applications/review/:id', async (req, res) => {
-    const id = req.params.id;
-    const { status, internalNotes, feedback, awarded } = req.body;
-    const filter = { _id: new ObjectId(id) };
-    const updateDoc = {
+    app.patch('/applications/review/:id', async (req, res) => {
+      const id = req.params.id;
+      const { status, internalNotes, feedback, awarded } = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
         $set: {
-            applicationStatus: status,
-            internalNotes: internalNotes,
-            feedback: feedback,
-            awarded: awarded 
+          applicationStatus: status,
+          internalNotes: internalNotes,
+          feedback: feedback,
+          awarded: awarded
         }
-    };
-    const result = await applicationsCollection.updateOne(filter, updateDoc);
-    res.send(result);
-});
+      };
+      const result = await applicationsCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
 
     app.get('/scholarships/:id', async (req, res) => {
@@ -118,7 +128,14 @@ app.patch('/applications/review/:id', async (req, res) => {
       const result = await usersCollection.findOne({ email });
       res.send(result);
     });
-
+    app.get('/users/count', async (req, res) => {
+      try {
+        const count = await usersCollection.countDocuments();
+        res.send({ totalUsers: count });
+      } catch (error) {
+        res.status(500).send({ message: 'Failed to get user count' });
+      }
+    });
     app.post('/users', async (req, res) => {
       try {
         const userData = req.body;
@@ -145,41 +162,58 @@ app.patch('/applications/review/:id', async (req, res) => {
       const result = await usersCollection.findOne({ email });
       res.send({ role: result?.role || "student" });
     });
-    
-// 1. Fetch all users for the dashboard
-app.get('/users/manage/all', async (req, res) => {
-    try {
+
+    // 1. Fetch all users for the dashboard
+    app.get('/users/manage/all', async (req, res) => {
+      try {
         const result = await usersCollection.find().toArray();
         res.send(result);
-    } catch (err) {
+      } catch (err) {
         res.status(500).send({ message: "Failed to fetch users" });
-    }
-});
+      }
+    });
 
-// 2. Update user role specifically (won't conflict with your POST /users)
-app.patch('/users/manage/role/:id', async (req, res) => {
-    try {
+    // 2. Update user role specifically (won't conflict with your POST /users)
+    app.patch('/users/manage/role/:id', async (req, res) => {
+      try {
         const id = req.params.id;
         const { role } = req.body;
         const filter = { _id: new ObjectId(id) };
         const updateDoc = { $set: { role: role } };
         const result = await usersCollection.updateOne(filter, updateDoc);
         res.send(result);
-    } catch (err) {
+      } catch (err) {
         res.status(500).send({ message: "Failed to update role" });
-    }
-});
+      }
+    });
+    app.patch('/users/login-update', async (req, res) => {
+      try {
+        const { email } = req.body;
+        if (!email) return res.status(400).send({ message: "Email is required" });
 
-// 3. Delete a user
-app.delete('/users/manage/delete/:id', async (req, res) => {
-    try {
+        const filter = { email: email };
+        const updateDoc = {
+          $set: {
+            lastLoggedIn: new Date() // Sets current date and time
+          }
+        };
+
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+      } catch (err) {
+        res.status(500).send({ message: "Server error during login update" });
+      }
+    });
+    // 3. Delete a user
+    app.delete('/users/manage/delete/:id', async (req, res) => {
+      try {
         const id = req.params.id;
         const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
         res.send(result);
-    } catch (err) {
+      } catch (err) {
         res.status(500).send({ message: "Failed to delete user" });
-    }
-});
+      }
+    });
 
     //application
     app.get('/applications', async (req, res) => {
@@ -280,7 +314,24 @@ app.delete('/users/manage/delete/:id', async (req, res) => {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       res.send(session);
     });
+    app.get('/reviews/:scholarshipId', async (req, res) => {
+      const { scholarshipId } = req.params;
+      const result = await reviewsCollection
+        .find({ scholarshipId })
+        .sort({ date: -1 }) // Newest first
+        .toArray();
+      res.send(result);
+    });
 
+    // POST: Add a new review
+    app.post('/reviews', async (req, res) => {
+      const reviewData = req.body;
+      const result = await reviewsCollection.insertOne({
+        ...reviewData,
+        date: new Date().toISOString()
+      });
+      res.status(201).send(result);
+    });
 
     console.log("Backend routes are set up successfully.");
 
