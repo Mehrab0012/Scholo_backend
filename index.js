@@ -19,8 +19,21 @@ const client = new MongoClient(uri, {
 
 // Middleware
 app.use(express.json());
-app.use(cors());
 
+
+// --- CORS setup for Netlify frontend ---
+app.use(cors({
+  origin: 'https://scholarshipstream.netlify.app',
+  methods: ['GET','POST','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  credentials: true
+}));
+app.options('*', cors({
+  origin: 'https://scholarshipstream.netlify.app',
+  methods: ['GET','POST','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  credentials: true
+}));
 //jwt verification
 
 const verifyToken = (req, res, next) => {
