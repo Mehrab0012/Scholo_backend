@@ -29,6 +29,7 @@ async function run() {
     const scholarshipsCollection = db.collection('scholarships');
     const usersCollection = db.collection('users');
     const applicationsCollection = db.collection('applications');
+    const reviewsCollection = db.collection('reviews');
 
     // --- Scholarships routes ---
     app.get('/scholarships', async (req, res) => {
@@ -144,6 +145,41 @@ app.patch('/applications/review/:id', async (req, res) => {
       const result = await usersCollection.findOne({ email });
       res.send({ role: result?.role || "student" });
     });
+    
+// 1. Fetch all users for the dashboard
+app.get('/users/manage/all', async (req, res) => {
+    try {
+        const result = await usersCollection.find().toArray();
+        res.send(result);
+    } catch (err) {
+        res.status(500).send({ message: "Failed to fetch users" });
+    }
+});
+
+// 2. Update user role specifically (won't conflict with your POST /users)
+app.patch('/users/manage/role/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const { role } = req.body;
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = { $set: { role: role } };
+        const result = await usersCollection.updateOne(filter, updateDoc);
+        res.send(result);
+    } catch (err) {
+        res.status(500).send({ message: "Failed to update role" });
+    }
+});
+
+// 3. Delete a user
+app.delete('/users/manage/delete/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        const result = await usersCollection.deleteOne({ _id: new ObjectId(id) });
+        res.send(result);
+    } catch (err) {
+        res.status(500).send({ message: "Failed to delete user" });
+    }
+});
 
     //application
     app.get('/applications', async (req, res) => {
