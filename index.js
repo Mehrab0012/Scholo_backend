@@ -24,6 +24,7 @@ app.use(express.json());
 // --- CORS setup for Netlify frontend ---
 app.use(cors({
   origin: [
+    
     'https://scholarshipstream.netlify.app'
   ],
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -200,7 +201,7 @@ async function run() {
       }
     });
 
-    app.get('/user/role/:email', verifyToken, async (req, res) => {
+    app.get('/user/role/:email', async (req, res) => {
       const email = req.params.email;
       const result = await usersCollection.findOne({ email });
       res.send({ role: result?.role || "student" });
@@ -217,7 +218,7 @@ async function run() {
     });
 
     // 2. Update user role specifically (won't conflict with your POST /users)
-    app.patch('/users/manage/role/:id', verifyToken, async (req, res) => {
+    app.patch('/users/manage/role/:id',  async (req, res) => {
       try {
         const id = req.params.id;
         const { role } = req.body;
@@ -229,7 +230,7 @@ async function run() {
         res.status(500).send({ message: "Failed to update role" });
       }
     });
-    app.patch('/users/login-update', verifyToken, async (req, res) => {
+    app.patch('/users/login-update',  async (req, res) => {
       try {
         const { email } = req.body;
         if (!email) return res.status(400).send({ message: "Email is required" });
