@@ -230,7 +230,7 @@ async function run() {
         res.status(500).send({ message: "Failed to update role" });
       }
     });
-    app.patch('/users/login-update',  async (req, res) => {
+    app.patch('/users/login-update',verifyToken,  async (req, res) => {
       try {
         const { email } = req.body;
         if (!email) return res.status(400).send({ message: "Email is required" });
